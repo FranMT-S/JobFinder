@@ -1,0 +1,7 @@
+@host = http://localhost:8080
+
+### Get the root of the API
+GET {{host}}/api/v1/scraper
+Content-Type: application/json
+
+

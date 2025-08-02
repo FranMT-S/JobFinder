@@ -1,0 +1,39 @@
+@host = http://localhost:8080/api/v1/scraper
+###
+POST {{host}}/remoteok
+Content-Type: application/json
+
+{
+  "location": "Worldwide",
+  "level": "Senior",
+  "skills": ["golang", "Python"],
+  "modalities": "Remote",
+  "MinimumSalaryExpectation": 10000,
+  "maximumSalaryExpectation": 100000,
+  "position": "Software Engineer"
+}
+
+
+###
+POST {{host}}/workremotely
+Content-Type: application/json
+
+{
+  "location": "",
+  "level": "",
+  "skills": [],
+  "modalities": "",
+  "MinimumSalaryExpectation": 5000,
+  "maximumSalaryExpectation": 30000,
+  "category": -1
+}
+
+HTTP/1.1 200  - OK
+content-type: application/json
+vary: Origin
+date: Sun, 13 Jul 2025 04:21:15 GMT
+content-length: 66
+connection: close
+
+###
+GET {{host}}/host
