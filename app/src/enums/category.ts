@@ -1,0 +1,20 @@
+export enum Category{
+    NotCategory = -1,
+    Engineer    = 0,
+    Executive   = 1,
+    Developer   = 2,
+    Finance     = 3,
+    SysAdmin    = 4,
+    Backend     = 5,
+    FrontEnd    = 6,
+    FullStack   = 7,
+    Cloud       = 8,
+    Mobile      = 9,
+    DevOps      = 10,
+    DataScience = 11,
+    Testing     = 12,
+    Architect   = 13,
+    Analyst     = 14,
+    Database    = 15,
+    Design      = 16
+}

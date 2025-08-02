@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --color-night_bg: #1f1f1f;
+    --color-night_primary: #181818;
+    --color-night_secondary: #1f1f1f;
+    --color-neo-green: #5d9b74;
+}
