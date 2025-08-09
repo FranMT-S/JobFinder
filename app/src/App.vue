@@ -51,6 +51,8 @@ const handleSubmit = async () => {
   }
 
   if(err){
+    firstLoad.value = false
+    isLoading.value = false
     trigger(err.message)
     return
   }

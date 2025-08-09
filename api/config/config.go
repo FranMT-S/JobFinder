@@ -37,6 +37,11 @@ func setGlobalConfig() {
 		API_PORT = API_DEFAULT_PORT
 	}
 
+	if CLIENT_HOST == "" {
+		// vue client
+		CLIENT_HOST = "http://localhost:5173"
+	}
+
 	if API_HOST == "" {
 		API_HOST = "localhost"
 	}

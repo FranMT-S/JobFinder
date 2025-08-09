@@ -24,9 +24,11 @@ Before you begin, ensure you have the following installed:
    go mod download
    ```
 
-3. Configure environment variables (if needed):
+3. Configure environment variables (at least the .env file is required ):
    - Create a `.env` file in the `api` directory
    - Add any required environment variables
+   - Copy the `.env.template` file to `.env`
+   - you can leave the .env in blank to use the default values
 
    ```
    API_PORT=
