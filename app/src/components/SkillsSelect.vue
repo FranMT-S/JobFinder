@@ -82,6 +82,7 @@ const focusInput = () => {
     :items="capitalizeSkills"
     label="Skills"
     variant="outlined"
+    density="compact"
     color="primary"
     bg-color="surfaceT"
     :clear-on-select="true"

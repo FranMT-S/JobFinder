@@ -10,4 +10,5 @@ export interface User{
   maxSalary: number
   category: number
   hostSelected: number[]
+  maxPage: number
 }

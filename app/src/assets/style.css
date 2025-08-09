@@ -17,3 +17,9 @@
 .dark select {
   background-color: #242424;
 }
+
+.no-spinner input::-webkit-outer-spin-button,
+.no-spinner input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

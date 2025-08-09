@@ -10,13 +10,14 @@ export interface Job {
     maximumSalary: number;
     skills: string[];
     modalities: Modality[];
+    description: string;
     company: string;
     location: string[];
     url: string;
     createdAt?: Date;
     web: string;
     host: number;
-    tag:string[]
+    tags:string[]
     contractType:string
     isRecentJob:boolean
     categories:Category[]
@@ -36,14 +37,14 @@ export interface JobRequest{
 }
 
 export interface MatchAnalizer{
-    PorcentSalary: number,
-    PorcentSkills: number,
-    PorcentModalities: number,
-    PorcentLevels: number,
-    PorcentPosition: number,
-    TotalPorcent: number,
-    SkillMatches: string[],
-    SalaryMessage: string   
+    porcentSalary: number,
+    porcentSkills: number,
+    porcentModalities: number,
+    porcentLevels: number,
+    porcentPosition: number,
+    totalPorcent: number,
+    skillMatches: string[],
+    salaryMessage: string   
 }
 
 export interface JobScrapeated{

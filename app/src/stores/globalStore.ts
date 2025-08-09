@@ -11,6 +11,7 @@ export const useGlobalStore = defineStore('global', () => {
 
     const isDarkMode = ref(localStorage.getItem('darkMode') === 'true')
     const isSalaryRange = ref(localStorage.getItem('salaryRange') === 'true')
+    const maxPage = ref<number>(Number(localStorage.getItem('maxPage')) || 1)
     const theme = ref(isDarkMode.value ? 'dark' : 'light')
     const skillsList = ref<string[]>([])
     const categoriesList = ref<Category[]>()
@@ -45,13 +46,19 @@ export const useGlobalStore = defineStore('global', () => {
       updateDarkMode()
     })
 
+    watch(maxPage, () => {
+      try {
+        localStorage.setItem('maxPage', maxPage.value.toString())
+      } catch (error) {
+        console.error('Error saving data in localStorage:', error)
+      }
+    })
+
     const updateDarkMode = () => {
       if(isDarkMode.value){
         document.body.classList.add('dark')
-        // document.body.classList.remove('light')
       }else{
         document.body.classList.remove('dark')
-        // document.body.classList.add('light')
       }
     }
 
@@ -95,6 +102,7 @@ export const useGlobalStore = defineStore('global', () => {
     return {
         isDarkMode,
         isSalaryRange,
+        maxPage,
         theme,
         toggleDarkMode,
         loadSkills,

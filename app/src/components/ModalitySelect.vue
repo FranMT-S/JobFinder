@@ -18,6 +18,7 @@ const modalityOptions = ref([
 <template>
     <v-select
       v-model="modality"
+      density="compact"
       color="primary"
       :items="modalityOptions"
       item-title="label"

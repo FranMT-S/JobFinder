@@ -17,7 +17,6 @@ export const useUserStore = defineStore('user', () =>{
   const maxSalary = ref<number>(0)
   const category = ref<CategoryEnum>(CategoryEnum.NotCategory)
   const hostSelected = ref<number[]>([0,1])
-  
 
   const resetData = () => {
     description.value = ''
@@ -84,7 +83,7 @@ export const useUserStore = defineStore('user', () =>{
         minSalary: minSalary.value,
         maxSalary: maxSalary.value,
         category: category.value,
-        hostSelected: hostSelected.value
+        hostSelected: hostSelected.value,
       }))
 
       return { ok: true, error: '' }

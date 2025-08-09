@@ -9,14 +9,12 @@ import JobMatch from './components/JobMatch.vue';
 import { useGlobalStore } from './stores/globalStore'
 import { useUserStore } from './stores/userStore';
 import { fetchScrapper } from './services/fetchScrapper';
-
+import ToggleDarkModeButton from './components/ToggleDarkModeButton.vue';
 
 const {message, show, trigger } = useToast()
 const {jobScrapeated, isLoading, firstLoad} = storeToRefs(useJobsStore())
 const {initAllData} = useGlobalStore()
-const {isDarkMode, theme} = storeToRefs(useGlobalStore())
-const {toggleDarkMode} = useGlobalStore()
-const {hostList} = storeToRefs(useGlobalStore())
+const { theme,isSalaryRange,hostList,maxPage } = storeToRefs(useGlobalStore())
 const { location, level, skills, modality, minSalary, maxSalary, category,hostSelected } = storeToRefs(useUserStore())
 
 let currentController: AbortController | null = null;
@@ -29,16 +27,20 @@ const handleSubmit = async () => {
     currentController = null
   }
 
+  const minSalaryValue = isSalaryRange.value ? minSalary.value : 0
+  const maxSalaryValue = isSalaryRange.value ? maxSalary.value : 0
+
   currentController = new AbortController()
   const signal = currentController.signal
   
-  const [err,result] = await fetchScrapper(1,10,{
+
+  const [err,result] = await fetchScrapper(1,maxPage.value,{
     location: location.value,
     level: level.value,
     skills: skills.value,
     modalities: modality.value,
-    minimumSalaryExpectation: minSalary.value,
-    maximumSalaryExpectation: maxSalary.value,
+    minimumSalaryExpectation: minSalaryValue,
+    maximumSalaryExpectation: maxSalaryValue,
     position: '',
     category: category.value,
     hostSelected: hostSelected.value
@@ -83,12 +85,45 @@ const toggleHost = (hostId: number) => {
       style="height: 100vh;"
     >
       <v-list class="text-end px-2">
-        <v-btn icon @click="toggleDarkMode">
-          <v-icon :color="theme">
-            {{ isDarkMode ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
-          </v-icon>
-        </v-btn>
+        <v-row class="ps-2">
+          <v-col cols="8" md="8" class="flex items-end   gap-2">
+            <v-icon icon="mdi-briefcase-search-outline" color="primary" />
+            <v-label>Max Page</v-label>
+          </v-col>
+          <v-col cols="4" md="4">
+            <ToggleDarkModeButton />
+          </v-col>
+        </v-row>
+       
+       <v-list-item class="!p-0 mt-2">
+          <v-slider
+            v-model="maxPage"
+            :max=100
+            :min=1
+            step=1
+            class="align-center ms-5"
+            hide-details
+          >
+            <template v-slot:append>
+              <v-text-field
+                :max="100"
+                :min="1"
+                step=1
+                label="Max"
+                control-variant="hidden"
+                class="no-spinner"
+                v-model="maxPage"
+                density="compact"
+                style="width: 70px"
+                type="number"
+                hide-details
+              ></v-text-field>
+            </template>
+          </v-slider>
+        </v-list-item>  
       </v-list>
+      
+
 
       <v-divider></v-divider>
 
@@ -97,6 +132,7 @@ const toggleHost = (hostId: number) => {
          <v-label class="mb-2">Host To Scrap</v-label>
          <div class="flex flex-wrap gap-2">
           <v-chip
+            size="small"
             v-for="host in hostList"
             :key="host.id"
             :color="hostSelected.includes(host.id) ? 'active' : 'inactive'"
@@ -107,7 +143,7 @@ const toggleHost = (hostId: number) => {
          </div>
         </v-list-item>
         <v-list-item>
-          <p class="text-[1.5rem] dark:text-neo-green">Ingresa tus datos</p>
+          <p class="text-[1.0rem] text-primary ">Enter your data</p>
         </v-list-item>
         <v-list-item>
           <JobSeekerForm />
@@ -124,10 +160,9 @@ const toggleHost = (hostId: number) => {
 
     </v-navigation-drawer>
 
-    <v-main class="overflow-y-auto" style="height: 100vh;">
-      <v-container class="h-full">
+    <v-main class="overflow-y-auto " style="height: 100vh;">
+      <v-container >
         <ToastBanner :message="message" :show="show"/>
-
         <v-container v-if="isLoading" >
           <v-row v-for="key in [1,2,3,4]" :key="'skeleton' + key">
             <v-col cols="12" md="12" elevation="10">
@@ -147,6 +182,7 @@ const toggleHost = (hostId: number) => {
             title="We couldn't find a match."
           />
         </div>
+  
         <JobMatch v-if="jobScrapeated.length > 0 && !isLoading" v-for="job in jobScrapeated" :key="job.job.url" :jobScrapeated="job" />
       </v-container>
     </v-main>

@@ -64,6 +64,7 @@ const onClickChip = (index: number) => {
     <SenioritySelect :seniority="level" @update:seniority="level = $event" />
     <v-select
       v-model="category"
+       density="compact"
       color="primary"
       :items="categoriesList"
       item-title="name"
@@ -71,17 +72,14 @@ const onClickChip = (index: number) => {
       label="Category"
       @update:modelValue="category = $event"
     />
-    <SkillsSelect :skills="skills" @update:skills="skills = $event"/>
-    <ChipList v-if="skills.length > 0" :items="skills" @onClick="onClickChip" @onClean="clearSkills" label="Skills" maxHeight="150px"/>
     <ModalitySelect class="mt-4" :modality="modality"  />
 
     <div class="flex-col gap-4">
-      
-      <div class="flex items-center gap-2 item-center">
-        
+      <div class="flex items-center gap-2 item-center"> 
         <v-switch
           v-model="isSalaryRange"
           color="primary"
+          density="compact"
           prepend-icon="mdi-currency-usd-off"
           :title="!isSalaryRange ? 'Any range' : 'Salary range'"
         >
@@ -93,6 +91,7 @@ const onClickChip = (index: number) => {
       <div class="flex  gap-4" v-if="isSalaryRange">
         <v-number-input
           color="primary"
+          density="compact"
           v-model="minSalary"
           control-variant="hidden"
           label="Min Salary"
@@ -101,6 +100,7 @@ const onClickChip = (index: number) => {
         />
         <v-number-input
          color="primary"
+         density="compact"
           v-model="maxSalary"
           control-variant="hidden"
           label="Max Salary"
@@ -108,7 +108,9 @@ const onClickChip = (index: number) => {
         />
       </div>
     </div>
-    
+    <SkillsSelect :skills="skills" @update:skills="skills = $event"/>
+
+    <ChipList v-if="skills.length > 0" :items="skills" @onClick="onClickChip" @onClean="clearSkills" label="Skills" maxHeight="150px"/>
 
   </form>
   

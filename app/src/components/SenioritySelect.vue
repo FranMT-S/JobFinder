@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { Seniority } from '../enums/seniority'
 
 
+
 const props = withDefaults(defineProps<{
     seniority: Seniority
 }>(), {
@@ -33,6 +34,7 @@ const onChange = () => {
       item-title="label"
       item-value="value"
       label="Seniority"
+      density="compact"
       @update:modelValue="onChange"
     />
 </template>

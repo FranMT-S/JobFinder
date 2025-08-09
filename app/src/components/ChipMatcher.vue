@@ -41,32 +41,32 @@
 <template>
   <div class="relative">
     <v-chip color="purple-lighten-1" @click="(e:any) => toggleShow(e)" :title="isShow ? 'Hide' : 'Show'">
-      <span class="me-1">Match</span>  <span class="font-weight-bold">{{ matchAnalizer.TotalPorcent }}%</span>
+      <span class="me-1">Match</span>  <span class="font-weight-bold">{{ matchAnalizer.totalPorcent }}%</span>
     </v-chip>
     <v-card color="surface" ref="refCard" class="position-absolute !p-4 top-full left-0  !z-[999999999999]" v-if="isShow">
       <div class="text-capitalize flex gap-10 w-max">
         <ul>
           <li class="mb-1">
             <v-icon size="small" color="primary" icon="mdi-map-marker-radius" />
-            modalities: {{ matchAnalizer.PorcentModalities }}%
+            modalities: {{ matchAnalizer.porcentModalities }}%
           </li>
           <li class="mb-1">
             <v-icon size="small" color="primary" icon="mdi-account" />
-            levels: {{ matchAnalizer.PorcentLevels }}%
+            levels: {{ matchAnalizer.porcentLevels }}%
           </li>
           <li class="mb-1">
             <v-icon size="small" color="primary" icon="mdi-briefcase" />
-            position: {{ matchAnalizer.PorcentPosition }}%
+            position: {{ matchAnalizer.porcentPosition }}%
           </li>
         </ul>
         <ul>
           <li class="mb-1">
             <v-icon size="small" color="primary" icon="mdi-currency-usd" />
-            salary: {{ matchAnalizer.PorcentSalary }}%
+            salary: {{ matchAnalizer.porcentSalary }}%
           </li>
           <li class="mb-1">
             <v-icon size="small" color="primary" icon="mdi-cog" />
-            skills: {{ matchAnalizer.PorcentSkills }}%
+            skills: {{ matchAnalizer.porcentSkills }}%
           </li>
         </ul>
       </div>
