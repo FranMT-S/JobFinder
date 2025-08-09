@@ -47,6 +47,7 @@ type Job struct {
 	Web           string       `json:"web"`
 	Url           string       `json:"url"`
 	Position      string       `json:"position"`
+	Description   string       `json:"description"`
 	MinimumSalary float64      `json:"minimumSalary"`
 	MaximumSalary float64      `json:"maximumSalary"`
 	Company       string       `json:"company"`
@@ -68,6 +69,7 @@ func NewBlankJob() *Job {
 		Web:           "",
 		Url:           "",
 		Position:      "",
+		Description:   "",
 		MinimumSalary: 0,
 		MaximumSalary: 0,
 		Company:       "",

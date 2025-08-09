@@ -42,6 +42,9 @@ func setupMiddleware(router *chi.Mux) {
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+
+	// compression
+	router.Use(middleware.Compress(5, "application/json", "application/xml", "text/plain"))
 }
 
 func setupRoutes(router *chi.Mux) {

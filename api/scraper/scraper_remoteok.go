@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -52,12 +53,25 @@ func (s RemoteOkScraper) GetJobs(ctx context.Context,
 ) {
 
 	c := SetupBasicCollector()
-	isFinished := false
+	c.MaxDepth = 2
 
-	counter := 0
+	jobPageCollector := c.Clone()
+	jobPageCollector.Async = true
+	jobPageCollector.Limit(&colly.LimitRule{
+		DomainGlob:  "*",
+		Parallelism: 25,
+		Delay:       2 * time.Second,
+	})
 
 	defer wg.Done()
+
+	var wgCollector sync.WaitGroup
+	var mu sync.Mutex
+
+	isFinished := false
+
 	jobsSended, jobsParsed := 0, 0
+
 	c.OnError(func(r *colly.Response, err error) {
 		fmt.Println("Error visiting", r.Request.URL.String(), err)
 	})
@@ -74,22 +88,21 @@ func (s RemoteOkScraper) GetJobs(ctx context.Context,
 
 	c.OnResponse(func(r *colly.Response) {
 		// add table tags to the html to fix the parsing because the response is just "tr" tags
-		html := string(r.Body)
-		html = "<table>" + html + "</table>"
-		doc, errint := goquery.NewDocumentFromReader(bytes.NewReader([]byte(html)))
+		htmlRaw := string(r.Body)
+		htmlRaw = "<table>" + htmlRaw + "</table>"
+		doc, errint := goquery.NewDocumentFromReader(bytes.NewReader([]byte(htmlRaw)))
 		if errint != nil {
 			chError <- fmt.Errorf("error parsing html: %v", errint)
 			return
 		}
 
 		if config.ENVIRONMENT == "development" {
-			helpers.SaveHTMLResponse(html, "remoteok.html")
+			helpers.SaveHTMLResponse(htmlRaw, "remoteok.html")
 		}
 
-		doc.Find("tr.job").Each(s.findJobs(func(job models.Job, err error) {
+		doc.Find("tr.job").Each(func(i int, e *goquery.Selection) {
 			if isFinished {
 				r.Request.Abort()
-
 				return
 			}
 
@@ -99,22 +112,71 @@ func (s RemoteOkScraper) GetJobs(ctx context.Context,
 				return
 			}
 
-			absoluteURL := fmt.Sprintf("%s://%s%s", r.Request.URL.Scheme, r.Request.URL.Host, job.Url)
-			job.Url = absoluteURL
+			wgCollector.Add(1)
+			go func(e *goquery.Selection) {
+				defer wgCollector.Done()
+				if isFinished {
+					return
+				}
 
-			counter++
-			if counter >= 3 {
-				<-time.After(1 * time.Second)
-				counter = 0
-			}
+				job, err := s.ParseJob(e)
 
-			chJob <- job
-			jobsSended++
-			if jobsSended >= maxJobs {
-				isFinished = true
-				return
-			}
-		}))
+				if err != nil {
+					chError <- fmt.Errorf("error parsing job: %v", err)
+					return
+				}
+
+				mu.Lock()
+				jobsSended++
+				if jobsSended > maxJobs {
+					isFinished = true
+					mu.Unlock()
+
+					return
+				}
+
+				mu.Unlock()
+
+				absoluteURL := fmt.Sprintf("%s://%s%s", r.Request.URL.Scheme, r.Request.URL.Host, job.Url)
+				job.Url = absoluteURL
+				isDescriptionParsed := false
+
+				var wgJobDescription sync.WaitGroup
+				wgJobDescription.Add(1)
+				// parse description
+				jobPageCollector.OnHTML(".markdown, .html", func(h *colly.HTMLElement) {
+					if isDescriptionParsed {
+						return
+					}
+
+					description, err := h.DOM.Html()
+					if err != nil {
+						description = "No description"
+					}
+
+					job.Description = description
+					isDescriptionParsed = true
+					wgJobDescription.Done()
+					// just we want the first markdown where is the job description, then abort
+					h.Request.Abort()
+				})
+
+				errVisit := RetryFunc(func() error {
+					return jobPageCollector.Visit(job.Url)
+				}, 3)
+
+				if errVisit != nil {
+					wgJobDescription.Done()
+					log.Println(errVisit)
+				}
+
+				wgJobDescription.Wait()
+				chJob <- job
+
+			}(e.Clone())
+		})
+
+		wgCollector.Wait()
 	})
 
 	errVisit := c.Visit(url)
@@ -124,10 +186,10 @@ func (s RemoteOkScraper) GetJobs(ctx context.Context,
 
 }
 
-// FindJobs is a function that finds the jobs from the page
-// callback is a function that is called when a job is found
-// returns a function that can be used in the OnHTML method of the collector of colly
-func (scraper RemoteOkScraper) findJobs(callback func(models.Job, error)) func(int, *goquery.Selection) {
+// ParseJob is a function that parses the job from the page
+// e is the element the container that contains the job details
+// returns a job and an error
+func (scraper RemoteOkScraper) ParseJob(e *goquery.Selection) (models.Job, error) {
 	var (
 		position      string
 		minimunSalary float64
@@ -137,51 +199,78 @@ func (scraper RemoteOkScraper) findJobs(callback func(models.Job, error)) func(i
 		location      []string
 		url           string
 		createdAt     *time.Time
+		levels        []models.Level
+		modalities    []models.Modality
 		tags          []string
 		categories    []models.Category
 	)
 
-	return func(i int, e *goquery.Selection) {
-		jobDetails := scraper.parseJobDetails(e)
-		position = jobDetails.positionName
-		minimunSalary = jobDetails.minSalary
-		maximumSalary = jobDetails.maxSalary
-		company = jobDetails.company
-		location = jobDetails.location
-		url = jobDetails.url
-		var err error
+	jobDetails := scraper.parseJobDetails(e)
+	position = jobDetails.positionName
+	minimunSalary = jobDetails.minSalary
+	maximumSalary = jobDetails.maxSalary
+	company = jobDetails.company
+	location = jobDetails.location
+	url = jobDetails.url
+	var err error
 
-		if position == "" || url == "" || company == "" {
-			err = errors.New("job details are not valid")
-		}
-
-		skills = scraper.parseSkills(e)
-		createdAt, _ = scraper.parseDateTime(e)
-
-		levels := GetLevels(position, skills)
-		modalities := GetModalities(location)
-		categories = scraper.GetCategories(position, skills)
-
-		job := models.NewBlankJob()
-		job.Host = models.RemoteOk
-		job.Web = "remoteok"
-		job.Position = position
-		job.Level = levels
-		job.MinimumSalary = minimunSalary
-		job.MaximumSalary = maximumSalary
-		job.Skills = skills
-		job.Modalities = modalities
-		job.Company = company
-		job.Location = location
-		job.Url = url
-		job.CreatedAt = createdAt
-		job.IsRecentJob = jobDetails.isRecentJob
-		job.ContractType = models.ContractNoSpecific
-		job.Tags = tags
-		job.Categories = categories
-
-		callback(*job, err)
+	if position == "" || url == "" || company == "" {
+		err = errors.New("job details are not valid")
 	}
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		skills = scraper.parseSkills(e)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		createdAt, _ = scraper.parseDateTime(e)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		levels = GetLevels(position, skills)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		modalities = GetModalities(location)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		categories = scraper.GetCategories(position, skills)
+	}()
+
+	wg.Wait()
+
+	job := models.NewBlankJob()
+	job.Host = models.RemoteOk
+	job.Web = "remoteok"
+	job.Position = position
+	job.Level = levels
+	job.MinimumSalary = minimunSalary
+	job.MaximumSalary = maximumSalary
+	job.Skills = skills
+	job.Modalities = modalities
+	job.Company = company
+	job.Location = location
+	job.Url = url
+	job.CreatedAt = createdAt
+	job.IsRecentJob = jobDetails.isRecentJob
+	job.ContractType = models.ContractNoSpecific
+	job.Tags = tags
+	job.Categories = categories
+
+	return *job, err
 }
 
 // parseJobDetails is a function that parses the job details from the page

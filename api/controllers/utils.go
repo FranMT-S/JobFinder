@@ -69,26 +69,26 @@ func GetMaxJobs(r *http.Request) int {
 }
 
 // decodeJobRequest is a function that get a JobRequest from a request body
-func decodeJobRequest(r *http.Request) (*models.JobRequest, error, int) {
+func decodeJobRequest(r *http.Request) (*models.JobRequest, int, error) {
 	var jobRequest models.JobRequest
 
 	err := json.NewDecoder(r.Body).Decode(&jobRequest)
 	if err != nil {
-		return nil, fmt.Errorf("invalid body:%v", err), http.StatusBadRequest
+		return nil, http.StatusBadRequest, fmt.Errorf("invalid body:%v", err)
 	}
 
 	if models.IsJobRequestNil(jobRequest) {
-		return nil, fmt.Errorf("invalid body"), http.StatusBadRequest
+		return nil, http.StatusBadRequest, fmt.Errorf("the body is empty")
 	}
 
-	fmt.Println(jobRequest.MinimumSalaryExpectation, jobRequest.MaximumSalaryExpectation, jobRequest.MinimumSalaryExpectation > jobRequest.MaximumSalaryExpectation)
-	if jobRequest.MinimumSalaryExpectation > jobRequest.MaximumSalaryExpectation && jobRequest.MinimumSalaryExpectation > 0 && jobRequest.MaximumSalaryExpectation > 0 {
-		return nil, fmt.Errorf("minimum salary expectation must be less than maximum salary expectation"), http.StatusBadRequest
+	if jobRequest.MinimumSalaryExpectation > jobRequest.MaximumSalaryExpectation &&
+		(jobRequest.MinimumSalaryExpectation > 0 && jobRequest.MaximumSalaryExpectation > 0) {
+		return nil, http.StatusBadRequest, fmt.Errorf("minimum salary expectation must be less than maximum salary expectation")
 	}
 
 	if jobRequest.Host == nil {
 		jobRequest.Host = []models.HostScrapper{models.RemoteOk, models.WorkRemotely}
 	}
 
-	return &jobRequest, nil, http.StatusOK
+	return &jobRequest, http.StatusOK, nil
 }

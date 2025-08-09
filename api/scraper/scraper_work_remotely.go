@@ -2,15 +2,16 @@ package scraper
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"html"
+
+	"github.com/FranMT-S/JobFinder/helpers"
 	"github.com/FranMT-S/JobFinder/models"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
@@ -21,51 +22,6 @@ type WorkRemotelyScraper struct{}
 func NewWorkRemotelyScraper() *WorkRemotelyScraper {
 	return &WorkRemotelyScraper{}
 }
-
-// func (s WorkRemotelyScraper) GetJobs(urlServer string) ([]models.Job, error) {
-// 	c := SetupBasicCollector()
-// 	var err error
-// 	jobs := make([]models.Job, 0)
-
-// 	c.OnRequest(func(r *colly.Request) {
-// 		r.Headers.Set("Content-Type", "text/html; charset=UTF-8")
-// 	})
-
-// 	c.OnResponse(func(r *colly.Response) {
-// 		fmt.Println("Visiting", r.Request.URL.String())
-
-// 	})
-
-// 	c.OnError(func(r *colly.Response, err error) {
-// 		fmt.Println("Error visiting", r.Request.URL.String(), err)
-// 	})
-
-// 	c.OnHTML("section.jobs a div.new-listing", func(e *colly.HTMLElement) {
-
-// 		if len(jobs) >= 4 {
-// 			return
-// 		}
-
-// 		e.DOM.Each(s.findJobs(func(job models.Job, errf error) {
-// 			if errf != nil {
-// 				log.Println("Error parsing job:", errf)
-// 				return
-// 			}
-
-// 			jobs = append(jobs, job)
-// 		}))
-// 	})
-
-// 	err = RetryFunc(func() error {
-// 		return c.Visit(urlServer)
-// 	}, 3)
-
-// 	if err != nil {
-// 		return nil, fmt.Errorf("error visiting url: %v", err)
-// 	}
-
-// 	return jobs, nil
-// }
 
 // ScrapperJob is an interface that represents a job scrapper
 // urlServer is the url of the server that will be scraped
@@ -108,39 +64,132 @@ func (s WorkRemotelyScraper) GetJobs(ctx context.Context,
 		fmt.Println("Error visiting", r.Request.URL.String(), err)
 	})
 
+	jobPageCollector := c.Clone()
+
 	c.OnHTML("section.jobs a div.new-listing", func(e *colly.HTMLElement) {
 		if isFinished {
 			e.Request.Abort()
 			return
 		}
 
-		e.DOM.Each(s.findJobs(func(job models.Job, errf error) {
-			if isFinished {
-				e.Request.Abort()
-				return
-			}
-
+		e.DOM.Each(func(i int, s *goquery.Selection) {
+			urlJob := s.Parent().AttrOr("href", "")
+			urlJob = fmt.Sprintf("%s://%s%s", e.Request.URL.Scheme, e.Request.URL.Host, urlJob)
+			fmt.Println("Visiting", urlJob)
+			jobPageCollector.Visit(urlJob)
 			jobsParsed++
 			if jobsParsed >= maxJobsParse {
 				isFinished = true
 				return
 			}
+		})
 
-			if errf != nil {
-				log.Println("Error parsing job:", errf)
-				return
+	})
+
+	jobPageCollector.OnHTML(".lis-container", func(e *colly.HTMLElement) {
+
+		job := models.NewBlankJob()
+		job.Host = models.WorkRemotely
+		job.Web = "workremotely"
+
+		// parse url
+		absoluteURL := e.Request.URL.String()
+		job.Url = absoluteURL
+
+		// collect data from details card
+		e.ForEach("li.lis-container__job__sidebar__job-about__list__item", func(i int, ch *colly.HTMLElement) {
+			text := ch.DOM.Text()
+			text = strings.ToLower(text)
+			dataText := ch.ChildText("span")
+			switch {
+			case strings.Contains(text, "posted on"):
+				// parse created at
+				createdAt := s.parseDateTime(dataText)
+				job.CreatedAt = createdAt
+			case strings.Contains(text, "job type"):
+				// parse contract type
+				job.ContractType = s.getContract(dataText)
+			case strings.Contains(text, "salary"):
+				// parse salary
+				minSalary, maxSalary := s.ParseSalary(dataText)
+				job.MinimumSalary = minSalary
+				job.MaximumSalary = maxSalary
+			case strings.Contains(text, "category"):
+				// parse categories
+				category := dataText
+				category = strings.TrimSpace(category)
+				category = strings.ToLower(category)
+				switch category {
+				case "design":
+					job.Categories = append(job.Categories, models.Design)
+				case "full stack":
+					job.Categories = append(job.Categories, models.FullStack)
+				case "sysadmin":
+					job.Categories = append(job.Categories, models.SysAdmin)
+				case "devops and sysadmin":
+					job.Categories = append(job.Categories, models.DevOps)
+				case "front end":
+					job.Categories = append(job.Categories, models.FrontEnd)
+				case "backend":
+					job.Categories = append(job.Categories, models.Backend)
+				}
+			case strings.Contains(text, "skills"):
+				// parse skills
+				ch.ForEach(".boxes a", func(i int, itag *colly.HTMLElement) {
+					tag := itag.DOM.Text()
+					tag = strings.TrimSpace(tag)
+					tag = strings.ToLower(tag)
+					job.Skills = append(job.Skills, models.NewSkill(tag))
+				})
+			case strings.Contains(text, "country"):
+				// parse locations
+				ch.ForEach(".boxes a", func(i int, icountry *colly.HTMLElement) {
+					country := icountry.DOM.Text()
+					country = strings.TrimSpace(country)
+					if helpers.StartsWithRegionalCharacters(country) {
+						splitString := strings.SplitN(country, " ", 2)
+						if len(splitString) == 2 {
+							country = splitString[1]
+							country = strings.TrimSpace(country)
+						}
+					}
+
+					job.Location = append(job.Location, country)
+				})
 			}
+		})
 
-			absoluteURL := fmt.Sprintf("%s://%s%s", e.Request.URL.Scheme, e.Request.URL.Host, job.Url)
-			job.Url = absoluteURL
+		// parse job name
+		position := e.ChildText(".lis-container__header__hero__company-info__title")
+		position = strings.TrimSpace(position)
 
-			chJob <- job
-			jobsSended++
-			if jobsSended >= maxJobs {
-				isFinished = true
-				return
-			}
-		}))
+		// parse description
+		description, err := e.DOM.Find(".lis-container__job__content__description").Html()
+		if err != nil {
+			job.Description = ""
+		} else {
+			job.Description = description
+		}
+
+		// parse name company
+		company := e.ChildText(".lis-container__job__sidebar__companyDetails__info__title")
+		company = strings.TrimSpace(company)
+
+		level := GetLevels(position, job.Skills)
+
+		job.Company = company
+		job.Position = position
+		job.IsRecentJob = s.isRecentJob(job)
+		job.Level = level
+
+		job.Url = html.EscapeString(job.Url)
+
+		chJob <- *job
+		jobsSended++
+		if jobsSended >= maxJobs {
+			isFinished = true
+			return
+		}
 	})
 
 	err = RetryFunc(func() error {
@@ -150,125 +199,13 @@ func (s WorkRemotelyScraper) GetJobs(ctx context.Context,
 	if err != nil {
 		chError <- fmt.Errorf("error visiting url: %v", err)
 	}
-
 }
 
-// FindJobs is a function that finds the jobs from the page
-// callback is a function that is called when a job is found
-// returns a function that can be used in the OnHTML method of the collector of colly
-func (scraper WorkRemotelyScraper) findJobs(callback func(models.Job, error)) func(int, *goquery.Selection) {
-	var (
-		position      string
-		minimunSalary float64
-		maximumSalary float64
-		skills        []models.Skill = make([]models.Skill, 0)
-		company       string
-		location      []string
-		url           string
-		createdAt     *time.Time
-		levels        []models.Level    = make([]models.Level, 0)
-		modalities    []models.Modality = make([]models.Modality, 0)
-		isRecentJob   bool
-		contractType  models.ContractType = models.ContractNoSpecific
-		tags          []string
-	)
-
-	return func(i int, e *goquery.Selection) {
-		position = scraper.getPosition(e)
-		createdAt = scraper.getCreatedAt(e)
-		company = scraper.getCompanyAndNewJob(e)
-		location = scraper.getLocation(e)
-		url = e.Parent().AttrOr("href", "")
-		tags, contractType, minimunSalary, maximumSalary, modalities = scraper.parseCategories(e)
-		var err error
-
-		if position == "" || url == "" || company == "" {
-			err = errors.New("job details are not valid")
-		}
-
-		skills = append(skills, scraper.findSkills(position)...)
-
-		isRecentJob = createdAt != nil && createdAt.Day() == time.Now().Day()
-
-		job := models.NewBlankJob()
-		job.Host = models.WorkRemotely
-		job.Web = "workremotely"
-		job.Position = position
-		job.Level = levels
-		job.MinimumSalary = minimunSalary
-		job.MaximumSalary = maximumSalary
-		job.Skills = skills
-		job.Modalities = modalities
-		job.Company = company
-		job.Location = location
-		job.Url = url
-		job.CreatedAt = createdAt
-		job.IsRecentJob = isRecentJob
-		job.ContractType = contractType
-		job.Tags = tags
-		job.Categories = make([]models.Category, 0)
-
-		callback(*job, err)
-	}
-}
-
-func (scraper WorkRemotelyScraper) findSkills(position string) []models.Skill {
-	skills := make([]models.Skill, 0)
-	skillsMatches := SkillsRegex.FindStringSubmatch(position)
-	for _, skill := range skillsMatches {
-		skill = strings.TrimSpace(skill)
-		if skill != "" {
-			skills = append(skills, models.NewSkill(skill))
-		}
-	}
-
-	return skills
-}
-
-func (scraper WorkRemotelyScraper) getPosition(e *goquery.Selection) string {
-	return strings.TrimSpace(e.Find("h4.new-listing__header__title").First().Text())
-}
-
-func (scraper WorkRemotelyScraper) getCompanyAndNewJob(e *goquery.Selection) string {
-	return strings.TrimSpace(e.Find(".new-listing__company-name").First().Text())
-}
-
-func (scraper WorkRemotelyScraper) getCreatedAt(e *goquery.Selection) *time.Time {
-	dateText := strings.ToLower(e.Find(".new-listing__header__icons__date").First().Text())
-	return scraper.parseDateTime(dateText)
-}
-
-func (scraper WorkRemotelyScraper) getLocation(e *goquery.Selection) []string {
-	return []string{strings.TrimSpace(e.Find(".new-listing__company-headquarters").First().Text())}
-}
-
-func (scraper WorkRemotelyScraper) parseCategories(e *goquery.Selection) (tags []string, contractType models.ContractType, minSalary float64, maxSalary float64, modalities []models.Modality) {
-	minSalary = -1
-	maxSalary = -1
-	contractType = models.ContractNoSpecific
-	modalities = make([]models.Modality, 0)
-	tags = make([]string, 0)
-
-	e.Find(".new-listing__categories__category").Each(func(i int, s *goquery.Selection) {
-		text := strings.TrimSpace(s.Text())
-		text = strings.ToLower(text)
-
-		if strings.Contains(text, "featured") || strings.Contains(text, "top 100") {
-			return
-		}
-
-		if contractType == models.ContractNoSpecific {
-			contractType = scraper.getContract(text)
-		} else if strings.Contains(text, "anywhere in the world") {
-			modalities = append(modalities, models.Remote)
-		} else if strings.Contains(text, "$") && (minSalary == -1 || maxSalary == -1) {
-			minSalary, maxSalary = scraper.ParseSalary(text)
-		} else {
-			tags = append(tags, text)
-		}
-	})
-
-	return tags, contractType, minSalary, maxSalary, modalities
+func (scraper WorkRemotelyScraper) isRecentJob(job *models.Job) bool {
+	day := time.Now().Day()
+	month := time.Now().Month()
+	year := time.Now().Year()
+	return job.CreatedAt != nil && job.CreatedAt.Day() == day && job.CreatedAt.Month() == month && job.CreatedAt.Year() == year
 }
 
 func (scraper WorkRemotelyScraper) ParseSalary(text string) (minSalary float64, maxSalary float64) {
@@ -334,24 +271,33 @@ func (scraper WorkRemotelyScraper) getContract(s string) models.ContractType {
 }
 
 func (scraper WorkRemotelyScraper) parseDateTime(dateText string) *time.Time {
-	var createdAt *time.Time
-
-	if strings.Contains(dateText, "new") {
-		now := time.Now()
-		createdAt = &now
-		return createdAt
-	}
-
 	dateText = strings.TrimSpace(dateText)
-	day, err := strconv.Atoi(strings.ReplaceAll(dateText, "d", ""))
-	if err != nil {
-		log.Println("Error parsing day:", err)
-		createdAt = nil
-		return createdAt
+	dateText = strings.ToLower(dateText)
+
+	splitDate := strings.Split(dateText, " ")
+
+	if len(splitDate) < 2 {
+		return nil
 	}
 
-	date := time.Now().AddDate(0, 0, -day)
-	createdAt = &date
+	timeStr, interval := splitDate[0], splitDate[1]
+	timeInt, err := strconv.Atoi(timeStr)
+	if err != nil {
+		return nil
+	}
+
+	var createdAt *time.Time = nil
+
+	now := time.Now()
+	switch interval {
+	case "days", "day":
+		now = now.AddDate(0, 0, -timeInt)
+		createdAt = &now
+	case "hours", "hour":
+		now = now.Add(time.Hour * time.Duration(timeInt))
+		createdAt = &now
+	}
 
 	return createdAt
+
 }

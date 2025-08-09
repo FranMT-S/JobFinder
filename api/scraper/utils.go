@@ -16,7 +16,7 @@ var CategoriesRegex = regexp.MustCompile(`fullstack|frontend|backend|devops`)
 // returns a pointer to a level
 func AnalyzeLevel(s string) *models.Level {
 
-	if strings.Contains(s, "senior") || strings.Contains(s, "principal") || s == "sr" {
+	if strings.Contains(s, "senior") || strings.Contains(s, "principal") || s == "sr" || strings.Contains(s, "head") {
 		return &models.Senior
 	}
 
@@ -45,7 +45,7 @@ func GetModalities(location []string) (modalities []models.Modality) {
 	isRemote := false
 	for _, l := range location {
 		l = strings.TrimSpace(strings.ToLower(l))
-		if strings.Contains(l, "remote") || strings.Contains(l, "worldwide") {
+		if strings.Contains(l, "remote") || strings.Contains(l, "worldwide") || strings.Contains(l, "any") {
 			isRemote = true
 			break
 		}

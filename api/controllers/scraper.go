@@ -36,7 +36,7 @@ func GetHost(w http.ResponseWriter, r *http.Request) {
 func Scrap(w http.ResponseWriter, r *http.Request) {
 	page := GetPage(r)
 	maxJobs := GetMaxJobs(r)
-	jobRequest, err, status := decodeJobRequest(r)
+	jobRequest, status, err := decodeJobRequest(r)
 
 	if err != nil {
 		WriteJSONError(w, *models.NewResponseError(
@@ -46,7 +46,8 @@ func Scrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chJob := make(chan models.Job, 10)
+	chJob := make(chan models.Job)
+	chWorkRemotely := make(chan models.Job)
 	chError := make(chan error)
 
 	analizedJobs := make([]AnalizedJob, 0, maxJobs)
@@ -55,14 +56,32 @@ func Scrap(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	for _, host := range jobRequest.Host {
-		wg.Add(1)
-		go initScraper(ctx, host, *jobRequest, page, maxJobs, wg, chJob, chError, constants.MAX_JOBS_PARSE)
+	processJobFunc := func(job models.Job) *models.Response {
+		matchAnalizer := scraper.MatchAnalizer(job, *jobRequest)
+		analizedJobs = append(analizedJobs, AnalizedJob{
+			Job:           job,
+			MatchAnalizer: matchAnalizer,
+		})
+
+		if len(analizedJobs) >= maxJobs {
+			cancel()
+			response := models.NewResponse(fmt.Sprintf("%d Jobs found", len(analizedJobs)), analizedJobs)
+			return response
+		}
+
+		return nil
 	}
+
+	wg.Add(1)
+	go initScraper(ctx, models.RemoteOk, *jobRequest, page, maxJobs, wg, chJob, chError, constants.MAX_JOBS_PARSE)
+
+	wg.Add(1)
+	go initScraper(ctx, models.WorkRemotely, *jobRequest, page, maxJobs, wg, chWorkRemotely, chError, constants.MAX_JOBS_PARSE)
 
 	go func() {
 		wg.Wait()
 		close(chJob)
+		close(chWorkRemotely)
 		close(chError)
 	}()
 
@@ -78,6 +97,7 @@ func Scrap(w http.ResponseWriter, r *http.Request) {
 			}
 			continue
 		case job, ok := <-chJob:
+
 			if !ok {
 				chJob = nil
 				response := models.NewResponse(fmt.Sprintf("%d Jobs found", len(analizedJobs)), analizedJobs)
@@ -85,15 +105,22 @@ func Scrap(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			matchAnalizer := scraper.MatchAnalizer(job, *jobRequest)
-			analizedJobs = append(analizedJobs, AnalizedJob{
-				Job:           job,
-				MatchAnalizer: matchAnalizer,
-			})
+			response := processJobFunc(job)
+			if response != nil {
+				render.JSON(w, r, response)
+				return
+			}
 
-			if len(analizedJobs) >= maxJobs {
-				cancel()
+		case job, ok := <-chWorkRemotely:
+			if !ok {
+				chWorkRemotely = nil
 				response := models.NewResponse(fmt.Sprintf("%d Jobs found", len(analizedJobs)), analizedJobs)
+				render.JSON(w, r, response)
+				return
+			}
+
+			response := processJobFunc(job)
+			if response != nil {
 				render.JSON(w, r, response)
 				return
 			}
@@ -132,7 +159,19 @@ func ScrapRemoteOk(w http.ResponseWriter, r *http.Request) {
 	jobs := make([]models.Job, 0, maxJobs)
 	page := GetPage(r)
 
-	jobRequest, err, status := decodeJobRequest(r)
+	processJobFunc := func(job models.Job) *models.Response {
+		jobs = append(jobs, job)
+		if len(jobs) >= maxJobs {
+			cancel()
+			response := models.NewResponse(fmt.Sprintf("%d Jobs found", len(jobs)), jobs)
+			render.JSON(w, r, response)
+			return response
+		}
+
+		return nil
+	}
+
+	jobRequest, status, err := decodeJobRequest(r)
 	if err != nil {
 		WriteJSONError(w, *models.NewResponseError(
 			status,
@@ -169,7 +208,12 @@ func ScrapRemoteOk(w http.ResponseWriter, r *http.Request) {
 				render.JSON(w, r, response)
 				return
 			}
-			jobs = append(jobs, job)
+			response := processJobFunc(job)
+			if response != nil {
+				render.JSON(w, r, response)
+				return
+			}
+
 		case err, ok := <-chError:
 			if !ok {
 				chError = nil
@@ -197,7 +241,19 @@ func ScrapWorkRemotely(w http.ResponseWriter, r *http.Request) {
 	jobs := make([]models.Job, 0, maxJobs)
 	page := GetPage(r)
 
-	jobRequest, err, status := decodeJobRequest(r)
+	jobRequest, status, err := decodeJobRequest(r)
+
+	processJobFunc := func(job models.Job) *models.Response {
+		jobs = append(jobs, job)
+		if len(jobs) >= maxJobs {
+			cancel()
+			response := models.NewResponse(fmt.Sprintf("%d Jobs found", len(jobs)), jobs)
+			render.JSON(w, r, response)
+			return response
+		}
+
+		return nil
+	}
 
 	if err != nil {
 		WriteJSONError(w, *models.NewResponseError(
@@ -235,7 +291,12 @@ func ScrapWorkRemotely(w http.ResponseWriter, r *http.Request) {
 				render.JSON(w, r, response)
 				return
 			}
-			jobs = append(jobs, job)
+
+			response := processJobFunc(job)
+			if response != nil {
+				render.JSON(w, r, response)
+				return
+			}
 		case err, ok := <-chError:
 			if !ok {
 				chError = nil
