@@ -1,21 +1,47 @@
-@host = http://localhost:8080/api/v1/scraper
-###
-POST {{host}}/remoteok
-Content-Type: application/json
+@host = http://localhost:8080/api/v1
 
+
+
+
+###
+# get host valid in the api
+GET {{host}}/scraper/host
+
+### service with can scrap in many servers
+POST {{host}}/scraper?page=1&max=50
+Content-Type: application/json
 {
-  "location": "Worldwide",
-  "level": "Senior",
-  "skills": ["golang", "Python"],
-  "modalities": "Remote",
-  "MinimumSalaryExpectation": 10000,
-  "maximumSalaryExpectation": 100000,
-  "position": "Software Engineer"
+    "location": "",
+    "level": "any",
+    "skills": [
+        "React-native"
+    ],
+    "modalities": "remote",
+    "minimumSalaryExpectation": -1,
+    "maximumSalaryExpectation": -1,
+    "category": -1,
+    "host": [
+        1,
+        0
+    ]
 }
 
+### Send max param
+POST {{host}}/scraper/remoteok?max=50
+Content-Type: application/json
+{
+    "location": "",
+    "level": "any",
+    "skills": [],
+    "modalities": "remote",
+    "minimumSalaryExpectation": -1,
+    "maximumSalaryExpectation": -1,
+    "category": 1
+}   
+
 
 ###
-POST {{host}}/workremotely
+POST {{host}}/scraper/workremotely
 Content-Type: application/json
 
 {
@@ -35,5 +61,3 @@ date: Sun, 13 Jul 2025 04:21:15 GMT
 content-length: 66
 connection: close
 
-###
-GET {{host}}/host
