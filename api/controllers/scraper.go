@@ -38,6 +38,7 @@ func Scrap(w http.ResponseWriter, r *http.Request) {
 	maxJobs := GetMaxJobs(r)
 	jobRequest, status, err := decodeJobRequest(r)
 
+
 	if err != nil {
 		WriteJSONError(w, *models.NewResponseError(
 			status,
@@ -72,11 +73,18 @@ func Scrap(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	wg.Add(1)
-	go initScraper(ctx, models.RemoteOk, *jobRequest, page, maxJobs, wg, chJob, chError, constants.MAX_JOBS_PARSE)
 
-	wg.Add(1)
-	go initScraper(ctx, models.WorkRemotely, *jobRequest, page, maxJobs, wg, chWorkRemotely, chError, constants.MAX_JOBS_PARSE)
+	for _, host := range jobRequest.Host {
+		switch host {
+		case models.RemoteOk:
+			wg.Add(1)
+			go initScraper(ctx, models.RemoteOk, *jobRequest, page, maxJobs, wg, chJob, chError, constants.MAX_JOBS_PARSE)
+		case models.WorkRemotely:
+			wg.Add(1)
+			go initScraper(ctx, models.WorkRemotely, *jobRequest, page, maxJobs, wg, chWorkRemotely, chError, constants.MAX_JOBS_PARSE)
+		}
+	}
+
 
 	go func() {
 		wg.Wait()

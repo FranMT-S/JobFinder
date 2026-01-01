@@ -16,6 +16,10 @@ var CategoriesRegex = regexp.MustCompile(`fullstack|frontend|backend|devops`)
 // returns a pointer to a level
 func AnalyzeLevel(s string) *models.Level {
 
+	if s == "" {
+		return nil
+	}
+
 	if strings.Contains(s, "senior") || strings.Contains(s, "principal") || s == "sr" || strings.Contains(s, "head") {
 		return &models.Senior
 	}

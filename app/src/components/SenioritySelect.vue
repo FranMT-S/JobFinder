@@ -17,6 +17,7 @@ const seniorityOptions = ref([
   { value: Seniority.SEMISENIOR, label: 'Semi-Senior' },
   { value: Seniority.SENIOR, label: 'Senior' },
 ])
+
 const selectedSeniority  = ref<Seniority>(props.seniority)
 const emit = defineEmits(['update:seniority'])
 

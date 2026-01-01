@@ -55,13 +55,7 @@ func (s RemoteOkScraper) GetJobs(ctx context.Context,
 	c := SetupBasicCollector()
 	c.MaxDepth = 2
 
-	jobPageCollector := c.Clone()
-	jobPageCollector.Async = true
-	jobPageCollector.Limit(&colly.LimitRule{
-		DomainGlob:  "*",
-		Parallelism: 25,
-		Delay:       2 * time.Second,
-	})
+	
 
 	defer wg.Done()
 
@@ -119,11 +113,40 @@ func (s RemoteOkScraper) GetJobs(ctx context.Context,
 					return
 				}
 
+				jobPageCollector := c.Clone()
 				job, err := s.ParseJob(e)
 
 				if err != nil {
 					chError <- fmt.Errorf("error parsing job: %v", err)
 					return
+				}
+
+				absoluteURL := fmt.Sprintf("%s://%s%s", r.Request.URL.Scheme, r.Request.URL.Host, job.Url)
+				job.Url = absoluteURL
+				isDescriptionParsed := false
+
+
+				// parse description
+				jobPageCollector.OnHTML(".markdown, .html", func(h*colly.HTMLElement) {
+					if isDescriptionParsed {
+						return
+					}
+
+					description, err := h.DOM.Html()
+					if err != nil {
+						description = "No description"
+					}
+
+					job.Description = description
+					isDescriptionParsed = true			
+				})
+
+				errVisit := RetryFunc(func() error {
+					return jobPageCollector.Visit(job.Url)
+				}, 3)
+
+				if errVisit != nil {
+					log.Println(errVisit)
 				}
 
 				mu.Lock()
@@ -136,45 +159,11 @@ func (s RemoteOkScraper) GetJobs(ctx context.Context,
 				}
 
 				mu.Unlock()
-
-				absoluteURL := fmt.Sprintf("%s://%s%s", r.Request.URL.Scheme, r.Request.URL.Host, job.Url)
-				job.Url = absoluteURL
-				isDescriptionParsed := false
-
-				var wgJobDescription sync.WaitGroup
-				wgJobDescription.Add(1)
-				// parse description
-				jobPageCollector.OnHTML(".markdown, .html", func(h *colly.HTMLElement) {
-					if isDescriptionParsed {
-						return
-					}
-
-					description, err := h.DOM.Html()
-					if err != nil {
-						description = "No description"
-					}
-
-					job.Description = description
-					isDescriptionParsed = true
-					wgJobDescription.Done()
-					// just we want the first markdown where is the job description, then abort
-					h.Request.Abort()
-				})
-
-				errVisit := RetryFunc(func() error {
-					return jobPageCollector.Visit(job.Url)
-				}, 3)
-
-				if errVisit != nil {
-					wgJobDescription.Done()
-					log.Println(errVisit)
-				}
-
-				wgJobDescription.Wait()
+				
 				chJob <- job
-
 			}(e.Clone())
 		})
+
 
 		wgCollector.Wait()
 	})
@@ -289,7 +278,7 @@ func (scraper RemoteOkScraper) parseJobDetails(e *goquery.Selection) remoteOkDet
 
 	companyContainer := e.Find(JOB_DETAILS_TAG).First()
 
-	if companyContainer == nil {
+	if companyContainer.Length() == 0 {
 		return remoteOkDetails{}
 	}
 
